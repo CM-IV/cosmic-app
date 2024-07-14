@@ -4,34 +4,24 @@
 //! Application API example
 
 use cosmic::app::{Command, Core};
-use cosmic::widget::nav_bar;
 use cosmic::{executor, iced, ApplicationExt, Element};
+use rand::distributions::{Distribution, Uniform};
 
-#[derive(Clone, Copy)]
-pub enum Page {
-    Page1,
-    Page2,
-    Page3,
-}
-
-impl Page {
-    const fn as_str(self) -> &'static str {
-        match self {
-            Page::Page1 => "Page 1",
-            Page::Page2 => "Page 2",
-            Page::Page3 => "Page 3",
-        }
-    }
-}
+const WORDLIST: &str = include_str!("../assets/wordlist.txt");
+const PASSWORD_LEN: usize = 8;
 
 /// Messages that are used specifically by our [`App`].
 #[derive(Clone, Debug)]
-pub enum Message {}
+pub enum Message {
+    GeneratePass,
+    ButtonPress(bool),
+}
 
 /// The [`App`] stores application-specific state.
 pub struct App {
     core: Core,
-    nav_model: nav_bar::Model,
+    password: String,
+    pressed: bool,
 }
 
 /// Implement [`cosmic::Application`] to integrate with COSMIC.
@@ -40,7 +30,7 @@ impl cosmic::Application for App {
     type Executor = executor::Default;
 
     /// Argument received [`cosmic::Application::new`].
-    type Flags = Vec<(Page, String)>;
+    type Flags = ();
 
     /// Message type specific to our [`App`].
     type Message = Message;
@@ -57,49 +47,46 @@ impl cosmic::Application for App {
     }
 
     /// Creates the application, and optionally emits command on initialize.
-    fn init(core: Core, input: Self::Flags) -> (Self, Command<Self::Message>) {
-        let mut nav_model = nav_bar::Model::default();
-
-        for (title, content) in input {
-            nav_model.insert().text(title.as_str()).data(content);
-        }
-
-        nav_model.activate_position(0);
-
-        let mut app = App { core, nav_model };
+    fn init(core: Core, _input: Self::Flags) -> (Self, Command<Self::Message>) {
+        let mut app = App {
+            core,
+            password: String::new(),
+            pressed: false,
+        };
 
         app.set_header_title("My Cosmic App".into());
 
         (app, Command::none())
     }
 
-    /// Allows COSMIC to integrate with your application's [`nav_bar::Model`].
-    fn nav_model(&self) -> Option<&nav_bar::Model> {
-        Some(&self.nav_model)
-    }
-
-    /// Called when a navigation item is selected.
-    fn on_nav_select(&mut self, id: nav_bar::Id) -> Command<Self::Message> {
-        self.nav_model.activate(id);
-
-        Command::none()
-    }
-
     /// Handle application events here.
-    fn update(&mut self, _message: Self::Message) -> Command<Self::Message> {
+    fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
+        match message {
+            Message::GeneratePass => {
+                self.password = Self::generate_password();
+            }
+            Message::ButtonPress(state) => {
+                self.pressed = state;
+            }
+        }
+
+        println!("{}", self.pressed);
+
         Command::none()
     }
 
     /// Creates a view after each update.
+    /// This needs changed to put substance on each page
     fn view(&self) -> Element<Self::Message> {
-        let page_content = self
-            .nav_model
-            .active_data::<String>()
-            .map_or("No page selected", String::as_str);
+        let txt = cosmic::widget::text(&self.password);
 
-        let text = cosmic::widget::text(page_content);
+        let btn = cosmic::widget::button("Generate")
+            .on_press_down(Message::ButtonPress(true))
+            .on_press(Message::GeneratePass);
 
-        let centered = cosmic::widget::container(text)
+        let column = cosmic::widget::column().push(txt).push(btn);
+
+        let centered = cosmic::widget::container(column.width(200))
             .width(iced::Length::Fill)
             .height(iced::Length::Shrink)
             .align_x(iced::alignment::Horizontal::Center)
@@ -109,4 +96,22 @@ impl cosmic::Application for App {
     }
 }
 
-impl App {}
+impl App {
+    fn generate_password() -> String {
+        let mut rng = rand::thread_rng();
+
+        let between = Uniform::from(0..7775);
+
+        let password: String = (0..PASSWORD_LEN)
+            .map(|_| {
+                WORDLIST
+                    .lines()
+                    .nth(between.sample(&mut rng))
+                    .expect("index in range")
+            })
+            .collect::<Vec<_>>()
+            .join("-");
+
+        password
+    }
+}
